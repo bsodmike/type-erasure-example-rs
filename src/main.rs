@@ -1,52 +1,51 @@
 #![allow(dead_code)]
 
 use core::fmt::Debug;
-use std::{any::Any, marker::PhantomData};
+use std::{any::Any, fmt::Display, marker::PhantomData};
 
-trait PinService<Request> {
-    type Response;
-    type ReturnType: ToString;
+// trait DisplayWithDebugTrait: Display + Debug {}
 
-    fn call(&mut self, req: Request) -> Self::ReturnType;
+trait PinService<'a, Request> {
+    type Response: Display;
+
+    fn call(&mut self, req: Request) -> Self::Response;
 }
 
 struct UntypedService<'a, S, Request, Response>
 where
-    S: PinService<Request, Response = Response>,
-    S::ReturnType: 'a,
+    S: PinService<'a, Request, Response = Response>,
+    S::Response: 'a,
     Request: Any,
-    Response: Debug,
 {
     svc: S,
     _phantom: PhantomData<&'a fn(Request) -> Response>,
 }
 
-impl<'a, S, Request, Response> PinService<Box<dyn Any>> for UntypedService<'a, S, Request, Response>
+impl<'a, S, Request, Response> PinService<'a, Box<dyn Any>>
+    for UntypedService<'a, S, Request, Response>
 where
-    S: PinService<Request, Response = Response>,
-    S::ReturnType: 'a,
+    S: PinService<'a, Request, Response = Response>,
+    S::Response: 'a,
     Request: Any,
-    Response: 'a + Debug,
+    Response: 'a + ToString + Display,
 {
-    type Response = Box<dyn 'a + Debug>;
-    type ReturnType = String;
+    type Response = Box<dyn 'a + Display>;
 
-    fn call(&mut self, req: Box<dyn Any>) -> Self::ReturnType {
+    fn call(&mut self, req: Box<dyn Any>) -> Self::Response {
         let req: Request = *req.downcast::<Request>().ok().expect("wrong request type");
 
         let resp = self.svc.call(req);
-        resp.to_string()
+        Box::new(resp.to_string())
     }
 }
 
 type BoxUntypedService<'a> =
-    Box<dyn 'a + PinService<Box<dyn Any>, Response = Box<dyn 'a + Debug>, ReturnType = String>>;
+    Box<dyn 'a + PinService<'a, Box<dyn Any>, Response = Box<dyn 'a + Display>>>;
 
 fn boxed_untyped_service<'a, S, Request>(svc: S) -> BoxUntypedService<'a>
 where
-    S: 'a + PinService<Request>,
-    S::ReturnType: 'a,
-    S::Response: 'a + Debug,
+    S: 'a + PinService<'a, Request, Response = Box<(dyn std::fmt::Display + 'a)>>,
+    S::Response: 'a,
     Request: Any,
 {
     Box::new(UntypedService {
@@ -64,7 +63,7 @@ where
 //     fn register<S, Request>(&mut self, svc: S)
 //     where
 //         S: 'static + PinService<Request>,
-//         S::ReturnType: 'static,
+//         S::Response: 'static,
 //         S::Response: 'static + Debug,
 //         Request: Any,
 //     {
@@ -87,24 +86,14 @@ where
 //     }
 // }
 
-fn main() {
-    let mut svc = boxed_untyped_service(Foo {});
-
-    let resp = svc.call(Box::new(123i64));
-    println!("{resp:?}");
-
-    let resp = boxed_untyped_service(Bar {}).call(Box::new((123.0f64, 456.0f64)));
-    println!("{resp:?}");
-}
-
+#[derive(Debug)]
 struct Foo {}
 
-impl PinService<i64> for Foo {
-    type Response = String;
-    type ReturnType = String;
+impl<'a> PinService<'a, i64> for Foo {
+    type Response = Box<dyn 'a + Display>;
 
-    fn call(&mut self, req: i64) -> Self::ReturnType {
-        format!("got i64: {req:?}")
+    fn call(&mut self, req: i64) -> Self::Response {
+        Box::new(format!("got i64: {req:?}"))
     }
 }
 
@@ -113,11 +102,20 @@ struct Point(f64, f64);
 
 struct Bar {}
 
-impl PinService<(f64, f64)> for Bar {
-    type Response = Point;
-    type ReturnType = String;
+impl<'a> PinService<'a, (f64, f64)> for Bar {
+    type Response = Box<dyn 'a + Display>;
 
-    fn call(&mut self, req: (f64, f64)) -> Self::ReturnType {
-        format!("{:?}", Point(req.0, req.1))
+    fn call(&mut self, req: (f64, f64)) -> Self::Response {
+        Box::new(format!("{:?}", Point(req.0, req.1)))
     }
+}
+
+fn main() {
+    let mut svc = boxed_untyped_service(Foo {});
+
+    let resp = svc.call(Box::new(123i64));
+    println!("{resp}");
+
+    let resp = boxed_untyped_service(Bar {}).call(Box::new((123.0f64, 456.0f64)));
+    println!("{resp}");
 }
