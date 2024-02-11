@@ -1,14 +1,7 @@
 #![allow(dead_code)]
 
 use core::fmt::Debug;
-
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-    fs::read_to_string,
-    marker::PhantomData,
-    pin::Pin,
-};
+use std::{any::Any, marker::PhantomData};
 
 trait PinService<Request> {
     type Response;
@@ -111,7 +104,6 @@ impl PinService<i64> for Foo {
     type ReturnType = String;
 
     fn call(&mut self, req: i64) -> Self::ReturnType {
-        // ready(format!("got i64: {req:?}"))
         format!("got i64: {req:?}")
     }
 }
