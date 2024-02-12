@@ -1,7 +1,12 @@
 #![allow(dead_code)]
 
 use core::fmt::Debug;
-use std::{any::Any, fmt::Display, marker::PhantomData};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    fmt::Display,
+    marker::PhantomData,
+};
 
 trait DisplayWithDebugTrait: Display + Debug {}
 impl<'a> DisplayWithDebugTrait for Box<dyn 'a + DisplayWithDebugTrait> {}
@@ -56,37 +61,40 @@ where
     })
 }
 
-// #[derive(Default)]
-// struct ServiceMap {
-//     map: HashMap<TypeId, BoxUntypedService<'static>>,
-// }
+// ServiceMap
+#[derive(Default)]
+struct ServiceMap {
+    map: HashMap<TypeId, BoxUntypedService<'static>>,
+}
 
-// impl ServiceMap {
-//     fn register<S, Request>(&mut self, svc: S)
-//     where
-//         S: 'static + PinService<Request>,
-//         S::Response: 'static,
-//         S::Response: 'static + Debug,
-//         Request: Any,
-//     {
-//         self.map
-//             .insert(TypeId::of::<Request>(), boxed_untyped_service(svc));
-//     }
-// }
+impl ServiceMap {
+    fn register<S, Request>(&mut self, svc: S)
+    where
+        S: 'static
+            + PinService<'static, Request, Response = Box<(dyn 'static + DisplayWithDebugTrait)>>,
+        S::Response: 'static,
+        S::Response: 'static + Debug,
+        Request: Any,
+    {
+        self.map
+            .insert(TypeId::of::<Request>(), boxed_untyped_service(svc));
+    }
+}
 
-// impl ServiceMap {
-//     async fn call<Request>(&mut self, req: Request)
-//     where
-//         Request: Any,
-//     {
-//         let Some(svc) = self.map.get_mut(&TypeId::of::<Request>()) else {
-//             return;
-//         };
+impl ServiceMap {
+    fn call<Request>(&mut self, req: Request)
+    where
+        Request: Any,
+    {
+        let Some(svc) = self.map.get_mut(&TypeId::of::<Request>()) else {
+            return;
+        };
 
-//         let resp = svc.call(Box::new(req)).await;
-//         println!("{resp:?}");
-//     }
-// }
+        let resp = svc.call(Box::new(req));
+        println!("{resp:?}");
+    }
+}
+// END: ServiceMap
 
 #[derive(Debug)]
 struct Foo {}
@@ -120,4 +128,14 @@ fn main() {
 
     let resp = boxed_untyped_service(Bar {}).call(Box::new((123.0f64, 456.0f64)));
     println!("{resp}");
+
+    println!("\nServiceMap:");
+    let mut service_map = ServiceMap::default();
+    service_map.register(Foo {});
+    service_map.register(Bar {});
+
+    // prints: "got i64: 123"
+    service_map.call(123i64);
+    service_map.call((123.0f64, 456.0f64));
+    service_map.call("str");
 }
