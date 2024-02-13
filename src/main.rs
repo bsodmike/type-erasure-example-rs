@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use core::fmt::Debug;
 use std::{
     any::{Any, TypeId},
@@ -9,8 +7,10 @@ use std::{
 };
 
 trait DisplayWithDebugTrait: Display + Debug {}
-impl<'a> DisplayWithDebugTrait for Box<dyn 'a + DisplayWithDebugTrait> {}
-impl<'a, T: Clone + Display + Debug> DisplayWithDebugTrait for T {}
+
+// Uncomment below if we want to further restrict `T` below with `Clone` as well.
+// impl DisplayWithDebugTrait for Box<dyn '_ + DisplayWithDebugTrait> {}
+impl<T: Display + Debug> DisplayWithDebugTrait for T {}
 
 trait PinService<'a, Request> {
     type Response: DisplayWithDebugTrait;
